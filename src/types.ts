@@ -20,19 +20,20 @@ export interface FeatureExtractor {
 export enum DecisionType {
   Default,
   Random,
-  DecisionTree
+  DecisionTree,
+  FiftyFifty
 }
 
 export enum TransitionType {
-  FadeIn,
-  Slam,
-  BeatRepeat,
-  Crossfade,
-  Beatmatch,
-  BeatmatchMultiple,
-  EchoFreeze,
-  PowerDown,
-  Effects
+  FadeIn = "startMixWithFadeIn",
+  Slam = "slam",
+  BeatRepeat = "beatRepeat",
+  Crossfade = "crossfade",
+  Beatmatch = "beatmatchCrossfade",
+  BeatmatchMultiple = "beatmatchCrossfade", //TODO REPLACE ONCE IMPLEMENTED!!
+  EchoFreeze = "echoFreeze",
+  PowerDown = "powerDown",
+  Effects = "effects"
 }
 
 export interface Transition {

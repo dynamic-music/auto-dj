@@ -2,9 +2,11 @@ import { Observable } from 'rxjs/Observable';
 import * as _ from 'lodash';
 import { DymoPlayer } from 'dymo-player';
 import { DymoGenerator, DymoTemplates, SuperDymoStore, globals } from 'dymo-core';
-import { MixGenerator } from './mix-generator';
+import { MixGenerator, AVAILABLE_TRANSITIONS } from './mix-generator';
 import { FeatureExtractor, Transition, TransitionType, DecisionType } from './types';
 import { Analyzer } from './analyzer';
+import { DecisionTree } from './decision-tree';
+import { STANDARD_TREE } from './standard-tree';
 
 export class AutoDj {
 
@@ -15,10 +17,13 @@ export class AutoDj {
   private player: DymoPlayer;
   private previousPlayingDymos = [];
   private previousSongs = [];
+  private decisionTree: DecisionTree<TransitionType>;
 
   //TODO AT SOME POINT IN THE FUTURE WE MAY HAVE AN API WITH SOME FEATURES
-  constructor(private featureApi: string, private featureExtractor: FeatureExtractor) {
+  constructor(private featureApi: string, private featureExtractor: FeatureExtractor,
+      private decisionType?: DecisionType, decisionTree = STANDARD_TREE) {
     this.player = new DymoPlayer(true, false, 0.5, 2)//, undefined, undefined, true);
+    this.decisionTree = new DecisionTree<TransitionType>(decisionTree);
   }
 
   init(): Promise<any> {
@@ -42,127 +47,80 @@ export class AutoDj {
   }
 
   async transitionToSong(audioUri: string): Promise<Transition> {
-    let buffer = await (await this.player.getAudioBank()).getAudioBuffer(audioUri);
-    let beats = await this.featureExtractor.extractBeats(buffer);
-    //drop initial and final incomplete bars
-    beats = _.dropWhile(beats, b => b.label.value !== "1");
-    beats = _.dropRightWhile(beats, b => b.label.value !== "4");
-    let newSong = await DymoTemplates.createAnnotatedBarAndBeatDymo2(this.dymoGen, audioUri, beats);
-    let oldSong = this.previousSongs.length ? _.last(this.previousSongs) : undefined;
-    let keys = await this.featureExtractor.extractKey(buffer);
-    this.dymoGen.setSummarizingMode(globals.SUMMARY.MODE);
-    await this.dymoGen.addFeature("key", keys, newSong);
-    let transition = await this.internalTransition(newSong);
-    if (oldSong) {
-      transition.features = await this.analyzer.getAllFeatures(oldSong, newSong);
-    }
+    await this.resetIfStopped();
+    const newSong = await this.extractFeaturesAndAddDymo(audioUri);
+    const features = await this.getTransitionFeatures(newSong);
+    const transition = await this.transitionBasedOnDecisionType(newSong, features);
+    transition.features = features;
+    this.previousSongs.push(newSong);
     return transition;
   }
 
-  private async internalTransition(newSong: string): Promise<Transition> {
-    //stopped playing, reset
+  private async resetIfStopped() {
     if (this.previousSongs.length > 0 && !this.player.isPlaying(this.mixGen.getMixDymo())) {
       this.previousSongs = [];
       await this.mixGen.init();
     }
-    await this.player.getDymoManager().loadFromStore(newSong);
-    const transition = await this.defaultTransition(newSong);
-    /*if (Math.random() > 0.5) {
-      transition = await this.randomTransition(newSong);
-    } else {*/
-      //transition = await this.startWhicheverTransitionIsBest(newSong);
-    //}
-    this.previousSongs.push(newSong);
-    this.player.playUri(this.mixGen.getMixDymo());
-    return transition;
   }
 
-  private async defaultTransition(newSong: string): Promise<Transition> {
-    let transition: Transition;
+  private async getTransitionFeatures(newSong: string): Promise<number[]> {
     if (this.previousSongs.length > 0) {
-      //transition = await this.startWhicheverTransitionIsBest(newSong);
-      //transition = await this.randomTransition(newSong);
-      transition = await this.mixGen.beatmatchCrossfade(newSong);
-    } else {
-      transition = await this.mixGen.startMixWithFadeIn(newSong);
+      const oldSong = _.last(this.previousSongs);
+      return this.analyzer.getAllFeatures(oldSong, newSong);
     }
-    transition.decision = DecisionType.Default;
+  }
+
+  private async extractFeaturesAndAddDymo(audioUri: string): Promise<string> {
+    const buffer = await (await this.player.getAudioBank()).getAudioBuffer(audioUri);
+    let beats = await this.featureExtractor.extractBeats(buffer);
+    //drop initial and final incomplete bars
+    beats = _.dropWhile(beats, b => b.label.value !== "1");
+    beats = _.dropRightWhile(beats, b => b.label.value !== "4");
+    const newSong = await DymoTemplates.createAnnotatedBarAndBeatDymo2(this.dymoGen, audioUri, beats);
+    const keys = await this.featureExtractor.extractKey(buffer);
+    this.dymoGen.setSummarizingMode(globals.SUMMARY.MODE);
+    await this.dymoGen.addFeature("key", keys, newSong);
+    await this.player.getDymoManager().loadFromStore(newSong);
+    return newSong;
+  }
+
+  private async transitionBasedOnDecisionType(newSong: string, features: number[]): Promise<Transition> {
+    let transition: Transition;
+    if (this.previousSongs.length == 0) {
+      transition = await this.mixGen.startMixWithFadeIn(newSong);
+    } else if (this.decisionType == DecisionType.Default) {
+      transition = await this.mixGen.beatmatchCrossfade(newSong);
+    } else if (this.decisionType == DecisionType.Random) {
+      transition = await this.randomTransition(newSong);
+    } else if (this.decisionType == DecisionType.FiftyFifty) {
+      //fiftyfifty random and decision tree
+      transition = Math.random() > 0.5 ? await this.randomTransition(newSong)
+        : await this.decisionTreeTransition(newSong, features);
+    } else {
+      transition = await this.decisionTreeTransition(newSong, features);
+    }
+    if (this.decisionType != DecisionType.FiftyFifty) {
+      transition.decision = this.decisionType;
+    }
+    this.player.playUri(this.mixGen.getMixDymo());
     return transition;
   }
 
   private async randomTransition(newSong: string): Promise<Transition> {
     console.log("random")
-    let transition: Transition;
-    if (this.previousSongs.length > 0) {
-      transition = await this.getRandomTransition()(newSong);
-    } else {
-      transition = await this.mixGen.startMixWithFadeIn(newSong);
-    }
+    const randomTransition = _.sample(AVAILABLE_TRANSITIONS);
+    const transition = await this.mixGen[randomTransition](newSong);
     transition.decision = DecisionType.Random;
     return transition;
   }
 
-  private async startWhicheverTransitionIsBest(newSong: string): Promise<Transition> {
-    console.log("tree")
-    let transition: Transition;
-    const previousSong = _.last(this.previousSongs);
-
-    if (this.previousSongs.length == 0) {
-      transition = await this.mixGen.startMixWithFadeIn(newSong);
-    } else {
-      //const songBoundaries = this.analyzer.getMainSongBody(newSong);
-      if (await this.analyzer.hasRegularBeats(newSong) && await this.analyzer.hasRegularBeats(previousSong)) {
-        console.log("both regular")
-        if (await this.analyzer.tempoSimilar(newSong, previousSong)) {
-          console.log("tempo similar")
-          //transition using beatmatching and tempo interpolation
-          transition = await this.mixGen.beatmatchCrossfade(newSong);
-        }/* else if (await analyzer.tempoCloseToMultiple(newSong, previousSong)) {
-          console.log("tempo multiple")
-          //TODO this.mixGen.transitionImmediatelyByCrossfadeAndBeatmatchToMultiple(newSong, oldDymo);
-          this.mixGen.transitionImmediatelyByCrossfadeAndBeatmatch(newSong);
-        }*/ else if (await this.analyzer.getKeyDistance(newSong, previousSong) <= 2) {
-          console.log("key similar")
-          if (Math.random() > 0.5) {
-            transition = await this.mixGen.effects(newSong);
-          } else {
-            transition = await this.mixGen.echoFreeze(newSong);
-          }
-        } else {
-          console.log("give up")
-          if (Math.random() > 0.5) {
-            transition = await this.mixGen.beatRepeat(newSong);
-          } else {
-            transition = await this.mixGen.powerDown(newSong);
-          }
-        }
-      } else if (await this.analyzer.getKeyDistance(newSong, previousSong) <= 2) {
-        console.log("key similar")
-        transition = await this.mixGen.echoFreeze(newSong);
-      } else {
-        console.log("give up")
-        if (Math.random() > 0.5) {
-          transition = await this.mixGen.beatRepeat(newSong);
-        } else {
-          transition = await this.mixGen.powerDown(newSong);
-        }
-      }
-    }
+  private async decisionTreeTransition(newSong: string, features: number[]): Promise<Transition> {
+    console.log("asking tree")
+    //const songBoundaries = this.analyzer.getMainSongBody(newSong);
+    const transitionType = this.decisionTree.classify(features);
+    const transition = await this.mixGen[transitionType](newSong);
     transition.decision = DecisionType.DecisionTree;
     return transition;
-  }
-
-  private getRandomTransition(): (string) => Promise<Transition> {
-    const transitions: ((string) => Promise<Transition>)[] = [
-      (newDymo: string) => this.mixGen.beatmatchCrossfade(newDymo),
-      (newDymo: string) => this.mixGen.echoFreeze(newDymo),
-      (newDymo: string) => this.mixGen.slam(newDymo),
-      (newDymo: string) => this.mixGen.beatRepeat(newDymo),
-      (newDymo: string) => this.mixGen.crossfade(newDymo),
-      (newDymo: string) => this.mixGen.powerDown(newDymo),
-      (newDymo: string) => this.mixGen.effects(newDymo)
-    ];
-    return transitions[_.random(transitions.length)];
   }
 
 }

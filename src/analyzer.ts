@@ -2,9 +2,17 @@ import * as _ from 'lodash';
 import * as math from 'mathjs';
 import { SuperDymoStore, uris } from 'dymo-core';
 
-export interface Pair<T> {
-  first: T,
-  second: T
+export enum Features {
+  TempoA,
+  TempoB,
+  TempoRatio,
+  TempoMultiplicity,
+  RegularityA,
+  RegularityB,
+  RegularityProduct,
+  KeyA,
+  KeyB,
+  KeyDistance
 }
 
 /* {[0]: 0, [7,5]: 1, [2,10]: 2, [9,3]: 3, [4,8]: 4, [11,1]: 5, [6]: 6} */
@@ -36,27 +44,40 @@ export class Analyzer {
       await this.getTempo(song1),
       await this.getTempo(song2),
       await this.getTempoRatio(song1, song2),
-      await this.getTempoRatio(song2, song1),
       await this.getTempoMultiple(song1, song2),
-      await this.getTempoMultiple(song2, song1),
       await this.getRegularity(song1),
       await this.getRegularity(song2),
+      await this.getRegularityProduct(song1, song2),
       await this.getKey(song1),
       await this.getKey(song2),
       await this.getKeyDistance(song1, song2)
     ]
+    /*USED FOR EARLY EXPERIMENTS
+      return [
+      await this.getTempo(song1),
+      await this.getTempo(song2),
+      await this.getTempoRatio(song1, song2),
+      await this.getTempoRatio(song2, song1),
+      await this.getTempoMultiple(song1, song2),
+      await this.getTempoMultiple(song2, song1),
+      await this.getRegularity(song1),
+      await this.getRegularity(song2), //TODO ADD REGULARITY PRODUCT OR RATIO
+      await this.getKey(song1),
+      await this.getKey(song2),
+      await this.getKeyDistance(song1, song2)
+    ]*/
   }
 
-  getMainSongBody(songUri: string): Pair<number> {
-    return {first:0,second:1};
+  getMainSongBody(songUri: string): [number, number] {
+    return [0, 1];
   }
 
-  async getKeyDistance(song1Uri: string, song2Uri: string): Promise<number> {
+  private async getKeyDistance(song1Uri: string, song2Uri: string): Promise<number> {
     let dist = Math.abs(await this.getKey(song1Uri) - await this.getKey(song2Uri));
     return TONAL_DISTANCES[dist];
   }
 
-  async getKey(songUri: string): Promise<number> {
+  private async getKey(songUri: string): Promise<number> {
     if (!this.keysCache.has(songUri)) {
       let key = await this.store.findFeatureValue(songUri, uris.CONTEXT_URI+"key");
       this.keysCache.set(songUri, key.length ? key[0] : key);
@@ -64,7 +85,7 @@ export class Analyzer {
     return this.keysCache.get(songUri);
   }
 
-  async getTempo(songUri: string): Promise<number> {
+  private async getTempo(songUri: string): Promise<number> {
     if (!this.tempoCache.has(songUri)) {
       const durations = await this.getBeatDurations(songUri);
       this.tempoCache.set(songUri, 60/math.mean(durations));
@@ -72,27 +93,36 @@ export class Analyzer {
     return this.tempoCache.get(songUri);
   }
 
-  async getTempoMultiple(song1Uri: string, song2Uri: string): Promise<number> {
-    const tempoRatio = await this.getTempoRatio(song1Uri, song2Uri);
-    return tempoRatio % 1;
+  //a symmetrical ratio < 1
+  private async getTempoMultiple(song1Uri: string, song2Uri: string): Promise<number> {
+    let tempoRatio = await this.getTempo(song1Uri) / await this.getTempo(song2Uri);
+    //make it larger than 1
+    tempoRatio = tempoRatio < 1 ? 1 / tempoRatio : tempoRatio;
+    let tempoMultiple = tempoRatio % 1;
+    //back to [0,1]
+    return tempoMultiple > 1 ? 1 / tempoMultiple : tempoMultiple;
   }
 
-  async getTempoRatio(song1Uri: string, song2Uri: string): Promise<number> {
+  //a symmetrical ratio < 1
+  private async getTempoRatio(song1Uri: string, song2Uri: string): Promise<number> {
     const tempoRatio = await this.getTempo(song1Uri) / await this.getTempo(song2Uri);
-    //console.log("tempo ratio", tempoRatio);
-    return tempoRatio;
+    return tempoRatio > 1 ? 1 / tempoRatio : tempoRatio;
   }
 
-  async hasRegularBeats(songUri: string): Promise<boolean> {
+  private async hasRegularBeats(songUri: string): Promise<boolean> {
     return await this.getRegularity(songUri) < .1;
   }
 
-  async getRegularity(songUri: string): Promise<number> {
+  private async getRegularityProduct(song1Uri: string, song2Uri: string): Promise<number> {
+    return (await this.getRegularity(song1Uri)) * (await this.getRegularity(song2Uri));
+  }
+
+  private async getRegularity(songUri: string): Promise<number> {
     const durations = await this.getBeatDurations(songUri);
     return math.std(durations);
   }
 
-  async tempoSimilar(song1Uri: string, song2Uri: string): Promise<boolean> {
+  private async tempoSimilar(song1Uri: string, song2Uri: string): Promise<boolean> {
     const ratio = await this.getTempoRatio(song1Uri, song2Uri);
     return this.isSimilar(1, ratio);
   }

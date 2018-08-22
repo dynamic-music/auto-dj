@@ -22,7 +22,8 @@ export class AutoDj {
   //TODO AT SOME POINT IN THE FUTURE WE MAY HAVE AN API WITH SOME FEATURES
   constructor(private featureApi: string, private featureExtractor: FeatureExtractor,
       private decisionType?: DecisionType,
-      decisionTree: JsonTree<TransitionType> = STANDARD_TREE) {
+      decisionTree: JsonTree<TransitionType> = STANDARD_TREE,
+      private defaultTransitionType = TransitionType.Beatmatch) {
     this.player = new DymoPlayer(true, false, 0.5, 2)//, undefined, undefined, true);
     this.decisionTree = new DecisionTree<TransitionType>(decisionTree);
   }
@@ -90,7 +91,7 @@ export class AutoDj {
     if (this.previousSongs.length == 0) {
       transition = await this.mixGen.startMixWithFadeIn(newSong);
     } else if (this.decisionType == DecisionType.Default) {
-      transition = await this.mixGen.beatmatchCrossfade(newSong);
+      transition = await this.mixGen[this.defaultTransitionType](newSong);
     } else if (this.decisionType == DecisionType.Random) {
       transition = await this.randomTransition(newSong);
     } else if (this.decisionType == DecisionType.FiftyFifty) {

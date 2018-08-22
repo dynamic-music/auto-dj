@@ -96,13 +96,13 @@ export class MixGenerator {
     const powerDown = await this.makeRampConstraint(powerRamp, powerBars, 'PlaybackRate(d) == 1-r');
     const powerDown2 = await this.makeSetsConstraint(
       [['d',powerBars]], 'DurationRatio(d) == 1/PlaybackRate(d)');
-    await this.loadTransition(powerRamp, powerDown, powerDown2);
     await this.addPartsToMix(powerBars);
     //add silence for n bars
     const silenceDuration = (duration/2/numBars)*numBarsBreak;
     await this.addSilence(silenceDuration);
     //add new song
-    return this.endTransition(state.newSongBars, TransitionType.PowerDown, duration + silenceDuration);
+    return this.endTransition(state.newSongBars, TransitionType.PowerDown,
+      duration + silenceDuration, [powerRamp, powerDown, powerDown2]);
   }
 
   async crossfade(songUri: string, numBars = 3, offsetBars = 0): Promise<Transition> {

@@ -1,0 +1,31 @@
+{
+  "name": "auto-dj",
+  "version": "0.1.0",
+  "description": "auto dj node module for the browser",
+  "main": "lib/index.js",
+  "typings": "lib/index",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dynamic-music/auto-dj.git"
+  },
+  "author": "florianthalmann",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dynamic-music/auto-dj/issues"
+  },
+  "homepage": "https://github.com/dynamic-music/auto-dj#readme",
+  "dependencies": {
+    "dymo-player": "github:dynamic-music/dymo-player"
+  },
+  "devDependencies": {
+    "@types/lodash": "^4.14.110",
+    "typescript": "^2.9.2"
+  }
+}

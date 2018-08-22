@@ -5,7 +5,7 @@ import { DymoGenerator, DymoTemplates, SuperDymoStore, globals } from 'dymo-core
 import { MixGenerator, AVAILABLE_TRANSITIONS } from './mix-generator';
 import { FeatureExtractor, Transition, TransitionType, DecisionType } from './types';
 import { Analyzer } from './analyzer';
-import { DecisionTree } from './decision-tree';
+import { DecisionTree, JsonTree } from './decision-tree';
 import { STANDARD_TREE } from './standard-tree';
 
 export class AutoDj {
@@ -21,7 +21,8 @@ export class AutoDj {
 
   //TODO AT SOME POINT IN THE FUTURE WE MAY HAVE AN API WITH SOME FEATURES
   constructor(private featureApi: string, private featureExtractor: FeatureExtractor,
-      private decisionType?: DecisionType, decisionTree = STANDARD_TREE) {
+      private decisionType?: DecisionType,
+      decisionTree: JsonTree<TransitionType> = STANDARD_TREE) {
     this.player = new DymoPlayer(true, false, 0.5, 2)//, undefined, undefined, true);
     this.decisionTree = new DecisionTree<TransitionType>(decisionTree);
   }

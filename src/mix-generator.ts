@@ -219,14 +219,6 @@ export class MixGenerator {
       this.store.addPart(this.mixDymoUri, p)));
   }
 
-  /**loads the controls and constraints and adds the latter to the list*/
-  private async loadTransition(...uris: string[]): Promise<any> {
-    const loaded = await this.player.getDymoManager().loadFromStore(...uris);
-    //TODO NOW ADD CONSTRAINT TRIGGERS
-    await this.addConstraintTriggers(loaded.constraintUris);
-    this.transitionConstraints.push(loaded.constraintUris);
-  }
-
   /**removes old song until current position + offset, registers new song and gets bars*/
   private async initTransition(songUri: string, newOffsetBars?: number): Promise<MixState> {
     const newSongBars = await this.registerSongAndGetBars(songUri, newOffsetBars);
@@ -236,9 +228,14 @@ export class MixGenerator {
     return {removedOldSongBars: oldSongBars, newSongBars: newSongBars};
   }
 
-  /**adds new song bars and returns transition object*/
+  /**adds new song bars, loads constraints and controls, and returns transition object*/
   private async endTransition(newSongBars: string[], type: TransitionType, duration: number, transitionUris?: string[]): Promise<Transition> {
-    if (uris) await this.loadTransition(...transitionUris);
+    if (transitionUris) {
+      const loaded = await this.player.getDymoManager().loadFromStore(...transitionUris);
+      //TODO NOW ADD CONSTRAINT TRIGGERS (ACTUALLY)
+      await this.addConstraintTriggers(loaded.constraintUris);
+      this.transitionConstraints.push(loaded.constraintUris);
+    }
     await this.addPartsToMix(newSongBars);
     return this.getTransitionObject(type, duration);
   }

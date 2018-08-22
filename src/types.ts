@@ -12,9 +12,9 @@ export interface Key {
   value: number;
 }
 
-export interface FeatureExtractor {
-  extractBeats(buffer: AudioBuffer): Promise<Beat[]>;
-  extractKey(buffer: AudioBuffer): Promise<Key[]>;
+export interface FeatureService {
+  getBeats(audioUri: string): Promise<Beat[]>;
+  getKey(audioUri: string): Promise<Key[]>;
 }
 
 export enum DecisionType {

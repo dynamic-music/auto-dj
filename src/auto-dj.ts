@@ -3,8 +3,9 @@ import * as _ from 'lodash';
 import { DymoPlayer } from 'dymo-player';
 import { DymoGenerator, DymoTemplates, SuperDymoStore, globals } from 'dymo-core';
 import { MixGenerator, AVAILABLE_TRANSITIONS } from './mix-generator';
-import { FeatureExtractor, Transition, TransitionType, DecisionType } from './types';
+import { FeatureService, Transition, TransitionType, DecisionType } from './types';
 import { Analyzer } from './analyzer';
+import { FeatureExtractor } from './feature-extractor';
 import { DecisionTree, JsonTree } from './decision-tree';
 import { STANDARD_TREE } from './standard-tree';
 
@@ -19,23 +20,24 @@ export class AutoDj {
   private previousSongs = [];
   private decisionTree: DecisionTree<TransitionType>;
 
-  //TODO AT SOME POINT IN THE FUTURE WE MAY HAVE AN API WITH SOME FEATURES
-  constructor(private featureApi: string, private featureExtractor: FeatureExtractor,
+  constructor(private featureService?: FeatureService,
       private decisionType?: DecisionType,
       decisionTree: JsonTree<TransitionType> = STANDARD_TREE,
       private defaultTransitionType = TransitionType.Beatmatch) {
-    this.player = new DymoPlayer(true, false, 0.5, 2)//, undefined, undefined, true);
-    this.decisionTree = new DecisionTree<TransitionType>(decisionTree);
+    this.init(decisionTree);
   }
 
-  init(): Promise<any> {
-    return this.player.init('https://raw.githubusercontent.com/dynamic-music/dymo-core/master/ontologies/')//'https://dynamic-music.github.io/dymo-core/ontologies/')
-      .then(() => {
-        this.store = this.player.getDymoManager().getStore();
-        this.dymoGen = new DymoGenerator(false, this.store);
-        this.mixGen = new MixGenerator(this.dymoGen, this.player);
-        this.analyzer = new Analyzer(this.store);
-      });
+  private async init(decisionTree: JsonTree<TransitionType>): Promise<any> {
+    this.decisionTree = new DecisionTree<TransitionType>(decisionTree);
+    this.player = new DymoPlayer(true, false, 0.5, 2)//, undefined, undefined, true);
+    await this.player.init('https://raw.githubusercontent.com/dynamic-music/dymo-core/master/ontologies/')//'https://dynamic-music.github.io/dymo-core/ontologies/')
+    this.store = this.player.getDymoManager().getStore();
+    this.dymoGen = new DymoGenerator(false, this.store);
+    this.mixGen = new MixGenerator(this.dymoGen, this.player);
+    this.analyzer = new Analyzer(this.store);
+    if (!this.featureService) {
+      this.featureService = new FeatureExtractor(await this.player.getAudioBank());
+    }
   }
 
   getBeatObservable(): Observable<any> {
@@ -73,13 +75,12 @@ export class AutoDj {
   }
 
   private async extractFeaturesAndAddDymo(audioUri: string): Promise<string> {
-    const buffer = await (await this.player.getAudioBank()).getAudioBuffer(audioUri);
-    let beats = await this.featureExtractor.extractBeats(buffer);
+    let beats = await this.featureService.getBeats(audioUri);
     //drop initial and final incomplete bars
     beats = _.dropWhile(beats, b => b.label.value !== "1");
     beats = _.dropRightWhile(beats, b => b.label.value !== "4");
     const newSong = await DymoTemplates.createAnnotatedBarAndBeatDymo2(this.dymoGen, audioUri, beats);
-    const keys = await this.featureExtractor.extractKey(buffer);
+    const keys = await this.featureService.getKey(audioUri);
     this.dymoGen.setSummarizingMode(globals.SUMMARY.MODE);
     await this.dymoGen.addFeature("key", keys, newSong);
     await this.player.getDymoManager().loadFromStore(newSong);

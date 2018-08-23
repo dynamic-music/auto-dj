@@ -11,6 +11,7 @@ import { STANDARD_TREE } from './standard-tree';
 
 export class AutoDj {
 
+  private ready: Promise<any>;
   private store: SuperDymoStore;
   private analyzer: Analyzer;
   private dymoGen: DymoGenerator;
@@ -24,7 +25,7 @@ export class AutoDj {
       private decisionType?: DecisionType,
       decisionTree: JsonTree<TransitionType> = STANDARD_TREE,
       private defaultTransitionType = TransitionType.Beatmatch) {
-    this.init(decisionTree);
+    this.ready = this.init(decisionTree);
   }
 
   private async init(decisionTree: JsonTree<TransitionType>): Promise<any> {
@@ -38,6 +39,10 @@ export class AutoDj {
     if (!this.featureService) {
       this.featureService = new FeatureExtractor(await this.player.getAudioBank());
     }
+  }
+
+  isReady(): Promise<any> {
+    return this.ready;
   }
 
   getBeatObservable(): Observable<any> {

@@ -18,6 +18,7 @@ export class AutoDj {
   private mixGen: MixGenerator;
   private player: DymoPlayer;
   private previousPlayingDymos = [];
+  private beatsPlayed = 0;
   private previousSongs = [];
   private decisionTree: DecisionTree<TransitionType>;
 
@@ -28,7 +29,7 @@ export class AutoDj {
     this.ready = this.init(decisionTree);
   }
 
-  private async init(decisionTree: JsonTree<TransitionType>): Promise<any> {
+  private async init(decisionTree: JsonTree<TransitionType>) {
     this.decisionTree = new DecisionTree<TransitionType>(decisionTree);
     this.player = new DymoPlayer(true, false, 0.5, 2)//, undefined, undefined, true);
     await this.player.init('https://raw.githubusercontent.com/dynamic-music/dymo-core/master/ontologies/')//'https://dynamic-music.github.io/dymo-core/ontologies/')
@@ -41,18 +42,19 @@ export class AutoDj {
     }
   }
 
-  isReady(): Promise<any> {
+  isReady(): Promise<void> {
     return this.ready;
   }
 
-  getBeatObservable(): Observable<any> {
+  getBeatObservable(): Observable<number> {
     return (this.player.getPlayingDymoUris())
       .filter(playingDymos => {
-        // TODO identify which track is playing, and associate with a specific colour
-       const nChanged = _.difference(playingDymos, this.previousPlayingDymos).length;
-       this.previousPlayingDymos = playingDymos;
-       return nChanged > 0;
-      });
+        //simple way to check wether there are new dymos playing, thus a new beat
+        const nChanged = _.difference(playingDymos, this.previousPlayingDymos).length;
+        this.previousPlayingDymos = playingDymos;
+        return nChanged > 0;
+      })
+      .map(() => this.beatsPlayed++);
   }
 
   async transitionToSong(audioUri: string): Promise<Transition> {

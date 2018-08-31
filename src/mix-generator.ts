@@ -94,15 +94,13 @@ export class MixGenerator {
     const duration = 2 * (await this.getTotalDuration(powerBars));
     const powerRamp = await this.addRampWithTrigger(duration);
     const powerDown = await this.makeRampConstraint(powerRamp, powerBars, 'PlaybackRate(d) == 1-r');
-    const powerDown2 = await this.makeSetsConstraint(
-      [['d',powerBars]], 'DurationRatio(d) == 1/PlaybackRate(d)');
     await this.addPartsToMix(powerBars);
     //add silence for n bars
     const silenceDuration = (duration/2/numBars)*numBarsBreak;
     await this.addSilence(silenceDuration);
     //add new song
     return this.endTransition(state.newSongBars, TransitionType.PowerDown,
-      duration + silenceDuration, [powerRamp, powerDown, powerDown2]);
+      duration + silenceDuration, [powerRamp, powerDown]);
   }
 
   async crossfade(songUri: string, numBars = 3, offsetBars = 0): Promise<Transition> {
@@ -167,10 +165,8 @@ export class MixGenerator {
     let beats = _.flatten(await Promise.all(oldSongBars.concat(newSongBars).map(p => this.store.findParts(p))));
     let beatMatch = await this.makeSetsConstraint(
       [['d',beats], ['t',[tempoParam]]], 'TimeStretchRatio(d) == t/60*DurationFeature(d)');
-    let beatMatch2 = await this.makeSetsConstraint(
-      [['d',beats]], 'DurationRatio(d) == 1/TimeStretchRatio(d)');
     console.log("beatmatched between tempos", oldTempo, newTempo);
-    return [tempoTransition, beatMatch, beatMatch2];
+    return [tempoTransition, beatMatch];
   }
 
   private async applyFadeIn(newSongBarsParts: string[]): Promise<[number, string[]]> {

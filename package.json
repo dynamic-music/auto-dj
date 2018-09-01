@@ -1,6 +1,6 @@
 {
   "name": "auto-dj",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "auto dj node module for the browser",
   "main": "lib/index.js",
   "typings": "lib/index",
@@ -26,7 +26,7 @@
   "homepage": "https://github.com/dynamic-music/auto-dj#readme",
   "dependencies": {
     "@extractors/qm": "github:LucasThompson/piper-qm-vamp-plugins",
-    "dymo-player": "github:dynamic-music/dymo-player",
+    "dymo-player": "0.2.0",
     "piper-js": "^0.21.2"
   },
   "devDependencies": {

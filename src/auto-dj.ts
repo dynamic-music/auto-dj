@@ -31,7 +31,11 @@ export class AutoDj {
 
   private async init(decisionTree: JsonTree<TransitionType>) {
     this.decisionTree = new DecisionTree<TransitionType>(decisionTree);
-    this.player = new DymoPlayer(true, false, 0.5, 2)//, undefined, undefined, true);
+    this.player = new DymoPlayer({
+      useWorkers: true,
+      scheduleAheadTime: 0.5,
+      loadAheadTime: 2
+    });
     await this.player.init('https://raw.githubusercontent.com/dynamic-music/dymo-core/master/ontologies/')//'https://dynamic-music.github.io/dymo-core/ontologies/')
     this.store = this.player.getDymoManager().getStore();
     this.dymoGen = new DymoGenerator(false, this.store);

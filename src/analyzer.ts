@@ -68,8 +68,17 @@ export class Analyzer {
     ]*/
   }
 
-  getMainSongBody(songUri: string): [number, number] {
+  private getMainSongBody(songUri: string): [number, number] {
     return [0, 1];
+  }
+
+  async findCuePoint(songUri: string): Promise<number> {
+    const loudnesses = await this.getBarLoudnesses(songUri);
+    const lastIncrease = loudnesses.findIndex((l,i) => loudnesses[i] < l);
+    const initialQuarter = loudnesses.slice(0, loudnesses.length/4);
+    const initialMax = _.max(initialQuarter);
+    console.log(loudnesses, lastIncrease, initialMax);
+    return loudnesses.findIndex((l,i) => loudnesses[i] < l);
   }
 
   private async getKeyDistance(song1Uri: string, song2Uri: string): Promise<number> {
@@ -132,18 +141,28 @@ export class Analyzer {
     return Math.abs(n1 - n2) < .1;
   }
 
+  private async getBarLoudnesses(songUri: string): Promise<number[]> {
+    const bars = await this.store.findParts(songUri);
+    return await this.findFeatureSeries(bars, uris.CONTEXT_URI+"loudness");
+  }
+
   private async getBeatDurations(songUri: string): Promise<number[]> {
     if (!this.beatsCache.has(songUri)) {
       const bars = await this.store.findParts(songUri);
       const beats = _.flatten(await Promise.all(bars.map(p => this.store.findParts(p))));
-      const durations = await Promise.all<number>(beats.map(b => this.findDuration(b)));
+      const durations = await this.findFeatureSeries(beats, uris.DURATION_FEATURE);
       this.beatsCache.set(songUri, durations);
     }
     return this.beatsCache.get(songUri);
   }
 
-  private async findDuration(dymo: string): Promise<number> {
-    return <number>(await this.store.findFeatureValue(dymo, uris.DURATION_FEATURE));
+  private async findFeatureSeries(dymos: string[], featureUri: string): Promise<number[]> {
+    return await Promise.all<number>(dymos.map(b =>
+      this.findFeature(b, featureUri)));
+  }
+
+  private async findFeature(dymo: string, featureUri: string): Promise<number> {
+    return <number>(await this.store.findFeatureValue(dymo, featureUri));
   }
 
 }

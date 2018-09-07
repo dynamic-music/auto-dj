@@ -7,14 +7,15 @@ export interface Beat {
   label: Value<string>;
 }
 
-export interface Key {
+export interface Feature {
   time: Value<number>;
   value: number;
 }
 
 export interface FeatureService {
   getBeats(audioUri: string): Promise<Beat[]>;
-  getKey(audioUri: string): Promise<Key[]>;
+  getKeys(audioUri: string): Promise<Feature[]>;
+  getLoudnesses(audioUri: string): Promise<Feature[]>;
 }
 
 export enum DecisionType {

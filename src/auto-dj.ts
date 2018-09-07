@@ -3,7 +3,7 @@ import * as _ from 'lodash';
 import { DymoPlayer } from 'dymo-player';
 import { DymoGenerator, DymoTemplates, SuperDymoStore, globals } from 'dymo-core';
 import { MixGenerator, AVAILABLE_TRANSITIONS } from './mix-generator';
-import { FeatureService, Transition, TransitionType, DecisionType } from './types';
+import { FeatureService, Transition, TransitionType, DecisionType, Feature } from './types';
 import { Analyzer } from './analyzer';
 import { FeatureExtractor } from './feature-extractor';
 import { DecisionTree, JsonTree } from './decision-tree';
@@ -79,6 +79,7 @@ export class AutoDj {
   }
 
   private async getTransitionFeatures(newSong: string): Promise<number[]> {
+    await this.analyzer.findCuePoint(newSong);
     if (this.previousSongs.length > 0) {
       const oldSong = _.last(this.previousSongs);
       return this.analyzer.getAllFeatures(oldSong, newSong);
@@ -91,11 +92,17 @@ export class AutoDj {
     beats = _.dropWhile(beats, b => b.label.value !== "1");
     beats = _.dropRightWhile(beats, b => b.label.value !== "4");
     const newSong = await DymoTemplates.createAnnotatedBarAndBeatDymo2(this.dymoGen, audioUri, beats);
-    const keys = await this.featureService.getKey(audioUri);
-    this.dymoGen.setSummarizingMode(globals.SUMMARY.MODE);
-    await this.dymoGen.addFeature("key", keys, newSong);
+    const keys = await this.featureService.getKeys(audioUri);
+    this.addFeature("key", keys, newSong, globals.SUMMARY.MODE);
+    const loudnesses = await this.featureService.getLoudnesses(audioUri);
+    this.addFeature("loudness", loudnesses, newSong, globals.SUMMARY.MEAN);
     await this.player.getDymoManager().loadFromStore(newSong);
     return newSong;
+  }
+
+  private async addFeature(name: string, values: Feature[], dymoUri: string, summaryMode: string) {
+    this.dymoGen.setSummarizingMode(summaryMode);
+    await this.dymoGen.addFeature(name, values, dymoUri);
   }
 
   private async transitionBasedOnDecisionType(newSong: string, features: number[]): Promise<Transition> {

@@ -15,7 +15,7 @@ await dj.isReady();
 
 Transition to a song using
 ```typescript
-dj.transitionToSong('https://path-to-audio');
+dj.transitionToTrack('https://path-to-audio');
 ```
 
 Synchronize anything to the beat with

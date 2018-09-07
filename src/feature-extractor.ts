@@ -67,8 +67,8 @@ export class FeatureExtractor implements FeatureService {
   }
 
   async getLoudnesses(audioUri: string): Promise<Feature[]> {
-    return this.getFrameBasedFeature(audioUri,
-      'vamp-libextract:loudness', 'loudness');
+    return undefined;/*this.getFrameBasedFeature(audioUri,
+      'vamp-libextract:loudness', 'loudness');*/
   }
 
   private async getFrameBasedFeature(audioUri: string, key: string, outputId: string): Promise<Feature[]> {

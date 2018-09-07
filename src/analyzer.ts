@@ -39,41 +39,37 @@ export class Analyzer {
 
   constructor(private store: SuperDymoStore) {}
 
-  async getAllFeatures(song1: string, song2: string): Promise<number[]> {
+  async getAllFeatures(track1: string, track2: string): Promise<number[]> {
     return [
-      await this.getTempo(song1),
-      await this.getTempo(song2),
-      await this.getTempoRatio(song1, song2),
-      await this.getTempoMultiple(song1, song2),
-      await this.getRegularity(song1),
-      await this.getRegularity(song2),
-      await this.getRegularityProduct(song1, song2),
-      await this.getKey(song1),
-      await this.getKey(song2),
-      await this.getKeyDistance(song1, song2)
+      await this.getTempo(track1),
+      await this.getTempo(track2),
+      await this.getTempoRatio(track1, track2),
+      await this.getTempoMultiple(track1, track2),
+      await this.getRegularity(track1),
+      await this.getRegularity(track2),
+      await this.getRegularityProduct(track1, track2),
+      await this.getKey(track1),
+      await this.getKey(track2),
+      await this.getKeyDistance(track1, track2)
     ]
     /*USED FOR EARLY EXPERIMENTS
       return [
-      await this.getTempo(song1),
-      await this.getTempo(song2),
-      await this.getTempoRatio(song1, song2),
-      await this.getTempoRatio(song2, song1),
-      await this.getTempoMultiple(song1, song2),
-      await this.getTempoMultiple(song2, song1),
-      await this.getRegularity(song1),
-      await this.getRegularity(song2), //TODO ADD REGULARITY PRODUCT OR RATIO
-      await this.getKey(song1),
-      await this.getKey(song2),
-      await this.getKeyDistance(song1, song2)
+      await this.getTempo(track1),
+      await this.getTempo(track2),
+      await this.getTempoRatio(track1, track2),
+      await this.getTempoRatio(track2, track1),
+      await this.getTempoMultiple(track1, track2),
+      await this.getTempoMultiple(track2, track1),
+      await this.getRegularity(track1),
+      await this.getRegularity(track2), //TODO ADD REGULARITY PRODUCT OR RATIO
+      await this.getKey(track1),
+      await this.getKey(track2),
+      await this.getKeyDistance(track1, track2)
     ]*/
   }
 
-  private getMainSongBody(songUri: string): [number, number] {
-    return [0, 1];
-  }
-
-  async findCuePoint(songUri: string): Promise<number> {
-    const loudnesses = await this.getBarLoudnesses(songUri);
+  async findCuePoint(trackUri: string): Promise<number> {
+    const loudnesses = await this.getBarLoudnesses(trackUri);
     const lastIncrease = loudnesses.findIndex((l,i) => loudnesses[i] < l);
     const initialQuarter = loudnesses.slice(0, loudnesses.length/4);
     const initialMax = _.max(initialQuarter);
@@ -81,30 +77,30 @@ export class Analyzer {
     return loudnesses.findIndex((l,i) => loudnesses[i] < l);
   }
 
-  private async getKeyDistance(song1Uri: string, song2Uri: string): Promise<number> {
-    let dist = Math.abs(await this.getKey(song1Uri) - await this.getKey(song2Uri));
+  private async getKeyDistance(track1Uri: string, track2Uri: string): Promise<number> {
+    let dist = Math.abs(await this.getKey(track1Uri) - await this.getKey(track2Uri));
     return TONAL_DISTANCES[dist];
   }
 
-  private async getKey(songUri: string): Promise<number> {
-    if (!this.keysCache.has(songUri)) {
-      let key = await this.store.findFeatureValue(songUri, uris.CONTEXT_URI+"key");
-      this.keysCache.set(songUri, key.length ? key[0] : key);
+  private async getKey(trackUri: string): Promise<number> {
+    if (!this.keysCache.has(trackUri)) {
+      let key = await this.store.findFeatureValue(trackUri, uris.CONTEXT_URI+"key");
+      this.keysCache.set(trackUri, key.length ? key[0] : key);
     }
-    return this.keysCache.get(songUri);
+    return this.keysCache.get(trackUri);
   }
 
-  private async getTempo(songUri: string): Promise<number> {
-    if (!this.tempoCache.has(songUri)) {
-      const durations = await this.getBeatDurations(songUri);
-      this.tempoCache.set(songUri, 60/math.mean(durations));
+  private async getTempo(trackUri: string): Promise<number> {
+    if (!this.tempoCache.has(trackUri)) {
+      const durations = await this.getBeatDurations(trackUri);
+      this.tempoCache.set(trackUri, 60/math.mean(durations));
     }
-    return this.tempoCache.get(songUri);
+    return this.tempoCache.get(trackUri);
   }
 
   //a symmetrical ratio < 1
-  private async getTempoMultiple(song1Uri: string, song2Uri: string): Promise<number> {
-    let tempoRatio = await this.getTempo(song1Uri) / await this.getTempo(song2Uri);
+  private async getTempoMultiple(track1Uri: string, track2Uri: string): Promise<number> {
+    let tempoRatio = await this.getTempo(track1Uri) / await this.getTempo(track2Uri);
     //make it larger than 1
     tempoRatio = tempoRatio < 1 ? 1 / tempoRatio : tempoRatio;
     let tempoMultiple = tempoRatio % 1;
@@ -113,26 +109,26 @@ export class Analyzer {
   }
 
   //a symmetrical ratio < 1
-  private async getTempoRatio(song1Uri: string, song2Uri: string): Promise<number> {
-    const tempoRatio = await this.getTempo(song1Uri) / await this.getTempo(song2Uri);
+  private async getTempoRatio(track1Uri: string, track2Uri: string): Promise<number> {
+    const tempoRatio = await this.getTempo(track1Uri) / await this.getTempo(track2Uri);
     return tempoRatio > 1 ? 1 / tempoRatio : tempoRatio;
   }
 
-  private async hasRegularBeats(songUri: string): Promise<boolean> {
-    return await this.getRegularity(songUri) < .1;
+  private async hasRegularBeats(trackUri: string): Promise<boolean> {
+    return await this.getRegularity(trackUri) < .1;
   }
 
-  private async getRegularityProduct(song1Uri: string, song2Uri: string): Promise<number> {
-    return (await this.getRegularity(song1Uri)) * (await this.getRegularity(song2Uri));
+  private async getRegularityProduct(track1Uri: string, track2Uri: string): Promise<number> {
+    return (await this.getRegularity(track1Uri)) * (await this.getRegularity(track2Uri));
   }
 
-  private async getRegularity(songUri: string): Promise<number> {
-    const durations = await this.getBeatDurations(songUri);
+  private async getRegularity(trackUri: string): Promise<number> {
+    const durations = await this.getBeatDurations(trackUri);
     return math.std(durations);
   }
 
-  private async tempoSimilar(song1Uri: string, song2Uri: string): Promise<boolean> {
-    const ratio = await this.getTempoRatio(song1Uri, song2Uri);
+  private async tempoSimilar(track1Uri: string, track2Uri: string): Promise<boolean> {
+    const ratio = await this.getTempoRatio(track1Uri, track2Uri);
     return this.isSimilar(1, ratio);
   }
 
@@ -141,19 +137,19 @@ export class Analyzer {
     return Math.abs(n1 - n2) < .1;
   }
 
-  private async getBarLoudnesses(songUri: string): Promise<number[]> {
-    const bars = await this.store.findParts(songUri);
+  private async getBarLoudnesses(trackUri: string): Promise<number[]> {
+    const bars = await this.store.findParts(trackUri);
     return await this.findFeatureSeries(bars, uris.CONTEXT_URI+"loudness");
   }
 
-  private async getBeatDurations(songUri: string): Promise<number[]> {
-    if (!this.beatsCache.has(songUri)) {
-      const bars = await this.store.findParts(songUri);
+  private async getBeatDurations(trackUri: string): Promise<number[]> {
+    if (!this.beatsCache.has(trackUri)) {
+      const bars = await this.store.findParts(trackUri);
       const beats = _.flatten(await Promise.all(bars.map(p => this.store.findParts(p))));
       const durations = await this.findFeatureSeries(beats, uris.DURATION_FEATURE);
-      this.beatsCache.set(songUri, durations);
+      this.beatsCache.set(trackUri, durations);
     }
-    return this.beatsCache.get(songUri);
+    return this.beatsCache.get(trackUri);
   }
 
   private async findFeatureSeries(dymos: string[], featureUri: string): Promise<number[]> {

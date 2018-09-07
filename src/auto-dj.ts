@@ -2,7 +2,7 @@ import { Observable } from 'rxjs/Observable';
 import * as _ from 'lodash';
 import { DymoPlayer } from 'dymo-player';
 import { DymoGenerator, DymoTemplates, SuperDymoStore, globals } from 'dymo-core';
-import { MixGenerator, AVAILABLE_TRANSITIONS } from './mix-generator';
+import { MixGenerator, AVAILABLE_TRANSITIONS, TransitionOptions } from './mix-generator';
 import { FeatureService, Transition, TransitionType, DecisionType, Feature } from './types';
 import { Analyzer } from './analyzer';
 import { FeatureExtractor } from './feature-extractor';
@@ -19,7 +19,7 @@ export class AutoDj {
   private player: DymoPlayer;
   private previousPlayingDymos = [];
   private beatsPlayed = 0;
-  private previousSongs = [];
+  private previousTracks = [];
   private decisionTree: DecisionTree<TransitionType>;
 
   constructor(private featureService?: FeatureService,
@@ -61,28 +61,48 @@ export class AutoDj {
       .map(() => this.beatsPlayed++);
   }
 
-  async transitionToSong(audioUri: string): Promise<Transition> {
+  async transitionToTrack(audioUri: string): Promise<Transition> {
     await this.resetIfStopped();
-    const newSong = await this.extractFeaturesAndAddDymo(audioUri);
-    const features = await this.getTransitionFeatures(newSong);
-    const transition = await this.transitionBasedOnDecisionType(newSong, features);
+    const newTrack = await this.extractFeaturesAndAddDymo(audioUri);
+    return this.internalTransition({trackUri: newTrack});
+  }
+
+  async playDjSet(audioUris: string[], numBars?: number, autoCue?: boolean) {
+    this.mapSeries(audioUris,
+      async (a,i) => await this.addTrackToMix(a, i*numBars, numBars, autoCue));
+  }
+
+  private async addTrackToMix(audioUri: string, position: number, numBars?: number, autoCue?: boolean) {
+    const newTrack = await this.extractFeaturesAndAddDymo(audioUri);
+    const options: TransitionOptions = {trackUri: newTrack};
+    if (autoCue) {
+      options.cueOffset = await this.analyzer.findCuePoint(newTrack);
+    }
+    options.duration = numBars;
+    options.position = position;
+    this.internalTransition(options);
+  }
+
+  private async internalTransition(options?: TransitionOptions): Promise<Transition> {
+    const features = await this.getTransitionFeatures(options.trackUri);
+    const transition = await this.transitionBasedOnDecisionType(options, features);
     transition.features = features;
-    this.previousSongs.push(newSong);
+    this.previousTracks.push(options.trackUri);
     return transition;
   }
 
   private async resetIfStopped() {
-    if (this.previousSongs.length > 0 && !this.player.isPlaying(this.mixGen.getMixDymo())) {
-      this.previousSongs = [];
+    if (this.previousTracks.length > 0 && !this.player.isPlaying(this.mixGen.getMixDymo())) {
+      this.previousTracks = [];
       await this.mixGen.init();
     }
   }
 
-  private async getTransitionFeatures(newSong: string): Promise<number[]> {
-    await this.analyzer.findCuePoint(newSong);
-    if (this.previousSongs.length > 0) {
-      const oldSong = _.last(this.previousSongs);
-      return this.analyzer.getAllFeatures(oldSong, newSong);
+  private async getTransitionFeatures(newTrack: string): Promise<number[]> {
+    //await this.analyzer.findCuePoint(newTrack);
+    if (this.previousTracks.length > 0) {
+      const oldTrack = _.last(this.previousTracks);
+      return this.analyzer.getAllFeatures(oldTrack, newTrack);
     }
   }
 
@@ -91,34 +111,36 @@ export class AutoDj {
     //drop initial and final incomplete bars
     beats = _.dropWhile(beats, b => b.label.value !== "1");
     beats = _.dropRightWhile(beats, b => b.label.value !== "4");
-    const newSong = await DymoTemplates.createAnnotatedBarAndBeatDymo2(this.dymoGen, audioUri, beats);
+    const newTrack = await DymoTemplates.createAnnotatedBarAndBeatDymo2(this.dymoGen, audioUri, beats);
     const keys = await this.featureService.getKeys(audioUri);
-    this.addFeature("key", keys, newSong, globals.SUMMARY.MODE);
+    this.addFeature("key", keys, newTrack, globals.SUMMARY.MODE);
     const loudnesses = await this.featureService.getLoudnesses(audioUri);
-    this.addFeature("loudness", loudnesses, newSong, globals.SUMMARY.MEAN);
-    await this.player.getDymoManager().loadFromStore(newSong);
-    return newSong;
+    this.addFeature("loudness", loudnesses, newTrack, globals.SUMMARY.MEAN);
+    await this.player.getDymoManager().loadFromStore(newTrack);
+    return newTrack;
   }
 
   private async addFeature(name: string, values: Feature[], dymoUri: string, summaryMode: string) {
-    this.dymoGen.setSummarizingMode(summaryMode);
-    await this.dymoGen.addFeature(name, values, dymoUri);
+    if (values) {
+      this.dymoGen.setSummarizingMode(summaryMode);
+      await this.dymoGen.addFeature(name, values, dymoUri);
+    }
   }
 
-  private async transitionBasedOnDecisionType(newSong: string, features: number[]): Promise<Transition> {
+  private async transitionBasedOnDecisionType(options: TransitionOptions, features: number[]): Promise<Transition> {
     let transition: Transition;
-    if (this.previousSongs.length == 0) {
-      transition = await this.mixGen.startMixWithFadeIn(newSong);
+    if (this.previousTracks.length == 0) {
+      transition = await this.mixGen.startMixWithFadeIn(options);
     } else if (this.decisionType == DecisionType.Default) {
-      transition = await this.mixGen[this.defaultTransitionType](newSong);
+      transition = await this.mixGen[this.defaultTransitionType](options);
     } else if (this.decisionType == DecisionType.Random) {
-      transition = await this.randomTransition(newSong);
+      transition = await this.randomTransition(options);
     } else if (this.decisionType == DecisionType.FiftyFifty) {
       //fiftyfifty random and decision tree
-      transition = Math.random() > 0.5 ? await this.randomTransition(newSong)
-        : await this.decisionTreeTransition(newSong, features);
+      transition = Math.random() > 0.5 ? await this.randomTransition(options)
+        : await this.decisionTreeTransition(options, features);
     } else {
-      transition = await this.decisionTreeTransition(newSong, features);
+      transition = await this.decisionTreeTransition(options, features);
     }
     if (this.decisionType != DecisionType.FiftyFifty) {
       transition.decision = this.decisionType;
@@ -127,21 +149,28 @@ export class AutoDj {
     return transition;
   }
 
-  private async randomTransition(newSong: string): Promise<Transition> {
+  private async randomTransition(options: TransitionOptions): Promise<Transition> {
     console.log("random")
     const randomTransition = _.sample(AVAILABLE_TRANSITIONS);
-    const transition = await this.mixGen[randomTransition](newSong);
+    const transition = await this.mixGen[randomTransition](options);
     transition.decision = DecisionType.Random;
     return transition;
   }
 
-  private async decisionTreeTransition(newSong: string, features: number[]): Promise<Transition> {
+  private async decisionTreeTransition(options: TransitionOptions, features: number[]): Promise<Transition> {
     console.log("asking tree")
-    //const songBoundaries = this.analyzer.getMainSongBody(newSong);
     const transitionType = this.decisionTree.classify(features);
-    const transition = await this.mixGen[transitionType](newSong);
+    const transition = await this.mixGen[transitionType](options);
     transition.decision = DecisionType.DecisionTree;
     return transition;
+  }
+
+  private async mapSeries<T,S>(array: T[], func: (arg: T, i: number) => Promise<S>): Promise<S[]> {
+    let result = [];
+    for (let i = 0; i < array.length; i++) {
+      result.push(await func(array[i], i));
+    }
+    return result;
   }
 
 }

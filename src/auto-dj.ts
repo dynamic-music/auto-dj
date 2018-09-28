@@ -1,4 +1,5 @@
-import { Observable } from 'rxjs/Observable';
+import { Observable } from 'rxjs';
+import { filter, map } from 'rxjs/operators';
 import * as _ from 'lodash';
 import { DymoPlayer } from 'dymo-player';
 import { DymoGenerator, DymoTemplates, SuperDymoStore, globals } from 'dymo-core';
@@ -52,13 +53,13 @@ export class AutoDj {
 
   getBeatObservable(): Observable<number> {
     return (this.player.getPlayingDymoUris())
-      .filter(playingDymos => {
+      .pipe(filter(playingDymos => {
         //simple way to check wether there are new dymos playing, thus a new beat
         const nChanged = _.difference(playingDymos, this.previousPlayingDymos).length;
         this.previousPlayingDymos = playingDymos;
         return nChanged > 0;
-      })
-      .map(() => this.beatsPlayed++);
+      }))
+      .pipe(map(() => this.beatsPlayed++));
   }
 
   async transitionToTrack(audioUri: string): Promise<Transition> {
@@ -113,9 +114,13 @@ export class AutoDj {
     beats = _.dropRightWhile(beats, b => b.label.value !== "4");
     const newTrack = await DymoTemplates.createAnnotatedBarAndBeatDymo2(this.dymoGen, audioUri, beats);
     const keys = await this.featureService.getKeys(audioUri);
-    this.addFeature("key", keys, newTrack, globals.SUMMARY.MODE);
+    if (keys) {
+      this.addFeature("key", keys, newTrack, globals.SUMMARY.MODE);
+    }
     const loudnesses = await this.featureService.getLoudnesses(audioUri);
-    this.addFeature("loudness", loudnesses, newTrack, globals.SUMMARY.MEAN);
+    if (loudnesses) {
+      this.addFeature("loudness", loudnesses, newTrack, globals.SUMMARY.MEAN);
+    }
     await this.player.getDymoManager().loadFromStore(newTrack);
     return newTrack;
   }

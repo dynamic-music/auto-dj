@@ -69,6 +69,8 @@ export class AutoDj {
   }
 
   async playDjSet(audioUris: string[], numBars?: number, autoCue?: boolean) {
+    await this.player.getAudioBank().preloadBuffers(audioUris);
+    console.log("preloaded audio")
     this.mapSeries(audioUris,
       async (a,i) => await this.addTrackToMix(a, i*numBars, numBars, autoCue));
   }
@@ -79,9 +81,10 @@ export class AutoDj {
     if (autoCue) {
       options.cueOffset = await this.analyzer.findCuePoint(newTrack);
     }
-    options.duration = numBars;
+    options.numBars = numBars;
+    options.duration = numBars/2;
     options.position = position;
-    this.internalTransition(options);
+    await this.internalTransition(options);
   }
 
   private async internalTransition(options?: TransitionOptions): Promise<Transition> {
@@ -115,11 +118,11 @@ export class AutoDj {
     const newTrack = await DymoTemplates.createAnnotatedBarAndBeatDymo2(this.dymoGen, audioUri, beats);
     const keys = await this.featureService.getKeys(audioUri);
     if (keys) {
-      this.addFeature("key", keys, newTrack, globals.SUMMARY.MODE);
+      await this.addFeature("key", keys, newTrack, globals.SUMMARY.MODE);
     }
     const loudnesses = await this.featureService.getLoudnesses(audioUri);
     if (loudnesses) {
-      this.addFeature("loudness", loudnesses, newTrack, globals.SUMMARY.MEAN);
+      await this.addFeature("loudness", loudnesses, newTrack, globals.SUMMARY.MEAN);
     }
     await this.player.getDymoManager().loadFromStore(newTrack);
     return newTrack;

@@ -70,11 +70,17 @@ export class Analyzer {
 
   async findCuePoint(trackUri: string): Promise<number> {
     const loudnesses = await this.getBarLoudnesses(trackUri);
-    const lastIncrease = loudnesses.findIndex((l,i) => loudnesses[i] < l);
-    const initialQuarter = loudnesses.slice(0, loudnesses.length/4);
-    const initialMax = _.max(initialQuarter);
-    console.log(loudnesses, lastIncrease, initialMax);
-    return loudnesses.findIndex((l,i) => loudnesses[i] < l);
+    const indexOfLastIncrease = loudnesses.findIndex((l,i) => loudnesses[i+1] < l);
+    const initialEighth = loudnesses.slice(0, loudnesses.length/8);
+    const indexOfInitialMax = loudnesses.indexOf(_.max(initialEighth));
+    const localMaxSquared = this.findLocalMaxes(this.findLocalMaxes(loudnesses));
+    const indexOfLocalMaxSquared = loudnesses.indexOf(localMaxSquared[0]);
+    console.log(indexOfLastIncrease, indexOfInitialMax, indexOfLocalMaxSquared);
+    return indexOfLocalMaxSquared;
+  }
+
+  private findLocalMaxes(values: number[]): number[] {
+    return values.filter((v, i) => v > values[i-1] && v > values[i+1]);
   }
 
   private async getKeyDistance(track1Uri: string, track2Uri: string): Promise<number> {
@@ -84,8 +90,10 @@ export class Analyzer {
 
   private async getKey(trackUri: string): Promise<number> {
     if (!this.keysCache.has(trackUri)) {
-      let key = await this.store.findFeatureValue(trackUri, uris.CONTEXT_URI+"key");
-      this.keysCache.set(trackUri, key.length ? key[0] : key);
+      const key = await this.store.findFeatureValue(trackUri, uris.CONTEXT_URI+"key");
+      if (key) {
+        this.keysCache.set(trackUri, key.length ? key[0] : key);
+      }
     }
     return this.keysCache.get(trackUri);
   }

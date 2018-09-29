@@ -12,9 +12,10 @@ interface MixState {
 
 export interface TransitionOptions {
   trackUri: string,
-  cueOffset?: number, //in bars
-  duration?: number, //in bars
-  position?: number //in bars
+  cueOffset?: number, //at what bar to start new track
+  numBars?: number, //how many bars to add to mix
+  duration?: number, //how many bars the transition should last
+  position?: number //at what bar to add to mix
 }
 
 const TRANSITION_OFFSET = 1; //number of bars from current position an asap transition starts
@@ -44,7 +45,7 @@ export class MixGenerator {
 
   async startMixWithFadeIn(options: TransitionOptions): Promise<Transition> {
     const numBars = options.duration ? options.duration : 2;
-    const newTrackBars = await this.registerTrackAndGetBars(options.trackUri);
+    const newTrackBars = await this.registerTrackAndGetBars(options);
     const [duration, uris] = await this.applyFadeIn(newTrackBars.slice(0, numBars));
     return this.endTransition(newTrackBars, TransitionType.FadeIn, duration, uris);
   }
@@ -201,7 +202,7 @@ export class MixGenerator {
   private async addRandomBeatToLoop(trackUri: string, loopDuration = 2): Promise<any> {
     let currentBeats = await this.store.findParts(this.mixDymoUri);
     //find a random beat in the track
-    let bars = await this.registerTrackAndGetBars(trackUri);
+    let bars = await this.registerTrackAndGetBars({trackUri: trackUri});
     let randomBar = bars[_.random(bars.length)];
     let randomBeat = (await this.store.findParts(randomBar))[_.random(4)];
     if (currentBeats.length == 0) {
@@ -221,7 +222,7 @@ export class MixGenerator {
   }
 
   async transitionImmediatelyToRandomBars(trackUri: string, numBars = 2): Promise<any> {
-    let bars = await this.registerTrackAndGetBars(trackUri);
+    let bars = await this.registerTrackAndGetBars({trackUri: trackUri});
     let randomBar = _.random(bars.length-numBars);
     return Promise.all(bars.slice(randomBar, randomBar+numBars).map(p =>
       this.store.addPart(this.mixDymoUri, p)));
@@ -229,8 +230,7 @@ export class MixGenerator {
 
   /**removes old track until current position + offset, registers new track and gets bars*/
   private async initTransition(options: TransitionOptions): Promise<MixState> {
-    const cueOffset = options.cueOffset ? options.cueOffset : 0;
-    const newTrackBars = await this.registerTrackAndGetBars(options.trackUri, cueOffset);
+    const newTrackBars = await this.registerTrackAndGetBars(options);
     let position: number;
     if (!options.position) {
       const currentPos = await this.player.getPosition(this.mixDymoUri);
@@ -254,10 +254,11 @@ export class MixGenerator {
     return this.getTransitionObject(type, duration);
   }
 
-  private async registerTrackAndGetBars(trackUri: string, offset = 0): Promise<string[]> {
-    this.tracks.push(trackUri);
-    let bars = await this.store.findParts(trackUri);
-    return bars.slice(offset);
+  private async registerTrackAndGetBars(options: TransitionOptions): Promise<string[]> {
+    this.tracks.push(options.trackUri);
+    let bars = await this.store.findParts(options.trackUri);
+    const numBars = options.numBars ? options.cueOffset+options.numBars : undefined;
+    return bars.slice(options.cueOffset, numBars);
   }
 
   private async addRampWithTrigger(duration: number) {

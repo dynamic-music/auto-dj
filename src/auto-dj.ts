@@ -69,20 +69,24 @@ export class AutoDj {
   }
 
   async playDjSet(audioUris: string[], numBars?: number, autoCue?: boolean) {
-    await this.player.getAudioBank().preloadBuffers(audioUris);
-    console.log("preloaded audio")
     this.mapSeries(audioUris,
-      async (a,i) => await this.addTrackToMix(a, i*numBars, numBars, autoCue));
+      async (a,i) => {
+        console.log("buffering", a)
+        await this.player.getAudioBank().preloadBuffers([a]);
+        console.log("preloaded")
+        await this.addTrackToMix(a, -1, numBars, autoCue, 4);
+        console.log("added, length now", (await this.store.findParts(this.mixGen.getMixDymo())).length)
+      });
   }
 
-  private async addTrackToMix(audioUri: string, position: number, numBars?: number, autoCue?: boolean) {
+  private async addTrackToMix(audioUri: string, position: number, numBars?: number, autoCue?: boolean, duration?: number) {
     const newTrack = await this.extractFeaturesAndAddDymo(audioUri);
     const options: TransitionOptions = {trackUri: newTrack};
     if (autoCue) {
       options.cueOffset = await this.analyzer.findCuePoint(newTrack);
     }
     options.numBars = numBars;
-    options.duration = numBars/2;
+    options.duration = duration;
     options.position = position;
     await this.internalTransition(options);
   }

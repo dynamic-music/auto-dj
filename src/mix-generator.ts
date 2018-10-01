@@ -15,7 +15,7 @@ export interface TransitionOptions {
   cueOffset?: number, //at what bar to start new track
   numBars?: number, //how many bars to add to mix
   duration?: number, //how many bars the transition should last
-  position?: number //at what bar to add to mix
+  position?: number //at what bar to add to mix, -1 for at end, undefined for asap
 }
 
 const TRANSITION_OFFSET = 1; //number of bars from current position an asap transition starts
@@ -231,14 +231,18 @@ export class MixGenerator {
   /**removes old track until current position + offset, registers new track and gets bars*/
   private async initTransition(options: TransitionOptions): Promise<MixState> {
     const newTrackBars = await this.registerTrackAndGetBars(options);
+    const length = (await this.store.findParts(this.mixDymoUri)).length;
     let position: number;
     if (!options.position) {
       const currentPos = await this.player.getPosition(this.mixDymoUri);
       position = currentPos + TRANSITION_OFFSET;
+    } else if (options.position < 0) {
+      position = length - options.duration;
     } else {
       position = options.position;
     }
-    const oldTrackBars = await this.store.removeParts(this.mixDymoUri, position);
+    const oldTrackBars = position < length ?
+      await this.store.removeParts(this.mixDymoUri, position) : [];
     return {removedOldTrackBars: oldTrackBars, newTrackBars: newTrackBars};
   }
 
@@ -257,8 +261,9 @@ export class MixGenerator {
   private async registerTrackAndGetBars(options: TransitionOptions): Promise<string[]> {
     this.tracks.push(options.trackUri);
     let bars = await this.store.findParts(options.trackUri);
-    const numBars = options.numBars ? options.cueOffset+options.numBars : undefined;
-    return bars.slice(options.cueOffset, numBars);
+    const offset = options.cueOffset ? options.cueOffset : 0;
+    const numBars = options.numBars ? offset+options.numBars : undefined;
+    return bars.slice(offset, numBars);
   }
 
   private async addRampWithTrigger(duration: number) {

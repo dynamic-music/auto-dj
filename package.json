@@ -1,6 +1,6 @@
 {
   "name": "auto-dj",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "auto dj node module for the browser",
   "main": "lib/index.js",
   "typings": "lib/index",

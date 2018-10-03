@@ -1,4 +1,4 @@
-import { Observable } from 'rxjs';
+import { Observable, BehaviorSubject } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
 import * as _ from 'lodash';
 import { DymoPlayer } from 'dymo-player';
@@ -22,6 +22,9 @@ export class AutoDj {
   private beatsPlayed = 0;
   private previousTracks = [];
   private decisionTree: DecisionTree<TransitionType>;
+  private scheduledTransitions: Transition[] = [];
+  private transitionsObservable: BehaviorSubject<Transition> = new BehaviorSubject(null);
+  private transitionsObserved = 0;
 
   constructor(private featureService?: FeatureService,
       private decisionType?: DecisionType,
@@ -40,7 +43,7 @@ export class AutoDj {
     await this.player.init('https://raw.githubusercontent.com/dynamic-music/dymo-core/master/ontologies/')//'https://dynamic-music.github.io/dymo-core/ontologies/')
     this.store = this.player.getDymoManager().getStore();
     this.dymoGen = new DymoGenerator(false, this.store);
-    this.mixGen = new MixGenerator(this.dymoGen, this.player);
+    this.mixGen = new MixGenerator(this.dymoGen, this.player, this.updateTransitionObservable.bind(this));
     this.analyzer = new Analyzer(this.store);
     if (!this.featureService) {
       this.featureService = new FeatureExtractor(await this.player.getAudioBank());
@@ -62,10 +65,19 @@ export class AutoDj {
       .pipe(map(() => this.beatsPlayed++));
   }
 
+  getTransitionObservable(): Observable<Transition> {
+    return this.transitionsObservable.asObservable();
+  }
+
+  private updateTransitionObservable() {
+    this.transitionsObservable.next(this.scheduledTransitions[this.transitionsObserved]);
+    this.transitionsObserved++;
+  }
+
   async transitionToTrack(audioUri: string): Promise<Transition> {
     await this.resetIfStopped();
     const newTrack = await this.extractFeaturesAndAddDymo(audioUri);
-    return this.internalTransition({trackUri: newTrack});
+    return this.internalTransition(audioUri, {trackUri: newTrack});
   }
 
   async playDjSet(audioUris: string[], numBars?: number, autoCue?: boolean) {
@@ -88,14 +100,16 @@ export class AutoDj {
     options.numBars = numBars;
     options.duration = duration;
     options.position = position;
-    await this.internalTransition(options);
+    await this.internalTransition(audioUri, options);
   }
 
-  private async internalTransition(options?: TransitionOptions): Promise<Transition> {
+  private async internalTransition(audioUri: string, options?: TransitionOptions): Promise<Transition> {
     const features = await this.getTransitionFeatures(options.trackUri);
     const transition = await this.transitionBasedOnDecisionType(options, features);
     transition.features = features;
     this.previousTracks.push(options.trackUri);
+    this.scheduledTransitions.push(transition);
+    transition.names = [audioUri];
     return transition;
   }
 

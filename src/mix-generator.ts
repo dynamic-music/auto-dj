@@ -1,7 +1,8 @@
 import * as _ from 'lodash';
 import { DymoPlayer } from 'dymo-player';
-import { DymoGenerator, ExpressionGenerator, SuperDymoStore, uris } from 'dymo-core';
+import { DymoGenerator, ExpressionGenerator, SuperDymoStore, uris, ValueObserver } from 'dymo-core';
 import { Transition, TransitionType } from './types';
+import { TransitionObserver } from './transition-observer';
 
 export const AVAILABLE_TRANSITIONS = Object.keys(TransitionType);
 
@@ -28,7 +29,8 @@ export class MixGenerator {
   private expressionGen: ExpressionGenerator;
   private transitionConstraints: string[][] = []; //ARRAYS OF CONSTRAINT URIS FOR NOW
 
-  constructor(private generator: DymoGenerator, private player: DymoPlayer) {
+  constructor(private generator: DymoGenerator, private player: DymoPlayer,
+      private transitionObserverFunction: () => any) {
     this.store = generator.getStore();
     this.expressionGen = new ExpressionGenerator(this.store);
     this.init();
@@ -272,9 +274,12 @@ export class MixGenerator {
     return rampUri;
   }
 
+  /** adds a trigger to init the the transition, calls an optional function when
+    triggered */
   private async addControlTrigger(controlUri: string) {
     const trigger = await this.store
       .setControlParam(controlUri, uris.AUTO_CONTROL_TRIGGER, 0);
+    new TransitionObserver(this.store, trigger, this.transitionObserverFunction);
     await this.generator.addEvent(this.mixDymoUri, trigger, 1);
   }
 

@@ -2,7 +2,7 @@ import { Observable, BehaviorSubject } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
 import * as _ from 'lodash';
 import { DymoPlayer } from 'dymo-player';
-import { DymoGenerator, DymoTemplates, SuperDymoStore, globals } from 'dymo-core';
+import { DymoGenerator, DymoTemplates, SuperDymoStore, SUMMARY } from 'dymo-core';
 import { MixGenerator, AVAILABLE_TRANSITIONS, TransitionOptions } from './mix-generator';
 import { FeatureService, Transition, TransitionType, DecisionType, Feature } from './types';
 import { Analyzer } from './analyzer';
@@ -38,7 +38,8 @@ export class AutoDj {
     this.player = new DymoPlayer({
       useWorkers: true,
       scheduleAheadTime: 0.5,
-      loadAheadTime: 2
+      loadAheadTime: 2,
+      useTone: false
     });
     await this.player.init('https://raw.githubusercontent.com/dynamic-music/dymo-core/master/ontologies/')//'https://dynamic-music.github.io/dymo-core/ontologies/')
     this.store = this.player.getDymoManager().getStore();
@@ -75,12 +76,14 @@ export class AutoDj {
   }
 
   async transitionToTrack(audioUri: string): Promise<Transition> {
+    await this.ready;
     await this.resetIfStopped();
     const newTrack = await this.extractFeaturesAndAddDymo(audioUri);
     return this.internalTransition(audioUri, {trackUri: newTrack});
   }
 
   async playDjSet(audioUris: string[], numBars?: number, autoCue?: boolean) {
+    await this.ready;
     this.mapSeries(audioUris,
       async (a,i) => {
         console.log("buffering", a)
@@ -89,6 +92,10 @@ export class AutoDj {
         await this.addTrackToMix(a, -1, numBars, autoCue, 4);
         console.log("added, length now", (await this.store.findParts(this.mixGen.getMixDymo())).length)
       });
+  }
+  
+  stop() {
+    this.player.stop();
   }
 
   private async addTrackToMix(audioUri: string, position: number, numBars?: number, autoCue?: boolean, duration?: number) {
@@ -133,14 +140,15 @@ export class AutoDj {
     //drop initial and final incomplete bars
     beats = _.dropWhile(beats, b => b.label.value !== "1");
     beats = _.dropRightWhile(beats, b => b.label.value !== "4");
-    const newTrack = await DymoTemplates.createAnnotatedBarAndBeatDymo2(this.dymoGen, audioUri, beats);
+    const segments = beats.map(b => ({time: b.time.value, value: b.label.value}));
+    const newTrack = await DymoTemplates.createAnnotatedBarAndBeatDymo2(this.dymoGen, audioUri, segments);
     const keys = await this.featureService.getKeys(audioUri);
     if (keys) {
-      await this.addFeature("key", keys, newTrack, globals.SUMMARY.MODE);
+      await this.addFeature("key", keys, newTrack, SUMMARY.MODE);
     }
     const loudnesses = await this.featureService.getLoudnesses(audioUri);
     if (loudnesses) {
-      await this.addFeature("loudness", loudnesses, newTrack, globals.SUMMARY.MEAN);
+      await this.addFeature("loudness", loudnesses, newTrack, SUMMARY.MEAN);
     }
     await this.player.getDymoManager().loadFromStore(newTrack);
     return newTrack;
@@ -149,7 +157,8 @@ export class AutoDj {
   private async addFeature(name: string, values: Feature[], dymoUri: string, summaryMode: string) {
     if (values) {
       this.dymoGen.setSummarizingMode(summaryMode);
-      await this.dymoGen.addFeature(name, values, dymoUri);
+      const data = values.map(f => ({time: f.time.value, value: f.value}));
+      await this.dymoGen.addFeature(name, data, dymoUri);
     }
   }
 

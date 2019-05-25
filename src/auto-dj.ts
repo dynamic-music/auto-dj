@@ -38,8 +38,8 @@ export class AutoDj {
     this.player = new DymoPlayer({
       useWorkers: true,
       scheduleAheadTime: 0.5,
-      loadAheadTime: 2,
-      useTone: false
+      loadAheadTime: 1,
+      useTone: true
     });
     await this.player.init('https://raw.githubusercontent.com/dynamic-music/dymo-core/master/ontologies/')//'https://dynamic-music.github.io/dymo-core/ontologies/')
     this.store = this.player.getDymoManager().getStore();
@@ -78,6 +78,8 @@ export class AutoDj {
   async transitionToTrack(audioUri: string): Promise<Transition> {
     await this.ready;
     await this.resetIfStopped();
+    //make sure audio is loaded before attempting transition
+    await this.player.getAudioBank().preloadBuffers([audioUri]);
     const newTrack = await this.extractFeaturesAndAddDymo(audioUri);
     return this.internalTransition(audioUri, {trackUri: newTrack});
   }
@@ -185,7 +187,6 @@ export class AutoDj {
   }
 
   private async randomTransition(options: TransitionOptions): Promise<Transition> {
-    console.log("random")
     const randomTransition = _.sample(AVAILABLE_TRANSITIONS);
     const transition = await this.mixGen[randomTransition](options);
     transition.decision = DecisionType.Random;

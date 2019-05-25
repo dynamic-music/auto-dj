@@ -101,7 +101,9 @@ export class Analyzer {
   private async getTempo(trackUri: string): Promise<number> {
     if (!this.tempoCache.has(trackUri)) {
       const durations = await this.getBeatDurations(trackUri);
-      this.tempoCache.set(trackUri, 60/math.mean(durations));
+      if (durations && durations.length) {
+        this.tempoCache.set(trackUri, 60/math.mean(durations));
+      }
     }
     return this.tempoCache.get(trackUri);
   }

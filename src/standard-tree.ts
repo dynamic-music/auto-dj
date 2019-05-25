@@ -21,6 +21,22 @@ export const STANDARD_TREE: JsonTree<TransitionType> = {
   left: {
     mes: "both regular",
     col: Features.TempoRatio,
+    val: .8,
+    right: {
+      mes: "tempo similar",
+      classes: [TransitionType.Beatmatch]
+    },
+    left: KEY_TREE
+  },
+  right: KEY_TREE
+};
+
+export const STANDARD_MULT_TREE: JsonTree<TransitionType> = {
+  col: Features.RegularityProduct,
+  val: .015,
+  left: {
+    mes: "both regular",
+    col: Features.TempoRatio,
     val: .85,
     right: {
       mes: "tempo similar",

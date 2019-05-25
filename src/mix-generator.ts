@@ -4,7 +4,7 @@ import { DymoGenerator, ExpressionGenerator, SuperDymoStore, uris, ValueObserver
 import { Transition, TransitionType } from './types';
 import { TransitionObserver } from './transition-observer';
 
-export const AVAILABLE_TRANSITIONS = Object.keys(TransitionType);
+export const AVAILABLE_TRANSITIONS = _.values(TransitionType);
 
 interface MixState {
   removedOldTrackBars: string[],
@@ -92,7 +92,7 @@ export class MixGenerator {
     const effectBars = state.removedOldTrackBars.slice(0, numBars);
     const duration = await this.getTotalDuration(effectBars);
     const effectsRamp = await this.addRampWithTrigger(duration);
-    const reverb = await this.makeRampConstraint(effectsRamp, effectBars, 'Reverb(d) == r');
+    const reverb = await this.makeRampConstraint(effectsRamp, effectBars, 'Reverb(d) == r/3');
     await this.addPartsToMix(effectBars);
     return this.endTransition(state.newTrackBars, TransitionType.Effects, duration, [effectsRamp, reverb]);
   }

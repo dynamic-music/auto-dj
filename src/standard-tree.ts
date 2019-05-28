@@ -7,7 +7,7 @@ const KEY_TREE: JsonTree<TransitionType> = {
   val: 3,
   left: {
     mes: "key similar",
-    classes: [TransitionType.Effects, TransitionType.EchoFreeze]
+    classes: [TransitionType.Effects, TransitionType.EchoFreeze, TransitionType.Crossfade]
   },
   right: {
     mes: "give up",

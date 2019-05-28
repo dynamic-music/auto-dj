@@ -1,4 +1,4 @@
-import { Observable, BehaviorSubject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
 import * as _ from 'lodash';
 import { DymoPlayer } from 'dymo-player';
@@ -23,7 +23,7 @@ export class AutoDj {
   private previousTracks = [];
   private decisionTree: DecisionTree<TransitionType>;
   private scheduledTransitions: Transition[] = [];
-  private transitionsObservable: BehaviorSubject<Transition> = new BehaviorSubject(null);
+  private transitionsObservable: Subject<Transition> = new Subject();
   private transitionsObserved = 0;
 
   constructor(private featureService?: FeatureService,
@@ -96,8 +96,10 @@ export class AutoDj {
       });
   }
   
-  stop() {
-    this.player.stop();
+  async stop() {
+    const uri = this.mixGen.getMixDymo();
+    this.reset();
+    await this.player.stopUri(uri);
   }
 
   private async addTrackToMix(audioUri: string, position: number, numBars?: number, autoCue?: boolean, duration?: number) {
@@ -122,11 +124,15 @@ export class AutoDj {
     return transition;
   }
 
-  private async resetIfStopped() {
+  private resetIfStopped() {
     if (this.previousTracks.length > 0 && !this.player.isPlaying(this.mixGen.getMixDymo())) {
-      this.previousTracks = [];
-      await this.mixGen.init();
+      return this.reset();
     }
+  }
+  
+  private reset() {
+    this.previousTracks = [];
+    return this.mixGen.init();
   }
 
   private async getTransitionFeatures(newTrack: string): Promise<number[]> {
@@ -198,6 +204,7 @@ export class AutoDj {
     const transitionType = this.decisionTree.classify(features);
     const transition = await this.mixGen[transitionType](options);
     transition.decision = DecisionType.DecisionTree;
+    console.log(transitionType)
     return transition;
   }
 

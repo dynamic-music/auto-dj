@@ -134,7 +134,9 @@ export class Analyzer {
 
   private async getRegularity(trackUri: string): Promise<number> {
     const durations = await this.getBeatDurations(trackUri);
-    return math.std(durations);
+    if (durations && durations.length) {
+      return math.std(durations);
+    }
   }
 
   private async tempoSimilar(track1Uri: string, track2Uri: string): Promise<boolean> {

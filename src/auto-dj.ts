@@ -10,6 +10,15 @@ import { FeatureExtractor } from './feature-extractor';
 import { DecisionTree, JsonTree } from './decision-tree';
 import { STANDARD_TREE } from './standard-tree';
 
+export interface AutoDjOptions {
+  featureService?: FeatureService,
+  decisionType?: DecisionType,
+  decisionTree?: JsonTree<TransitionType>,
+  defaultTransitionType?:  TransitionType,
+  scheduleAheadTime?: number,
+  loadAheadTime?: number
+}
+
 export class AutoDj {
 
   private ready: Promise<any>;
@@ -18,6 +27,9 @@ export class AutoDj {
   private dymoGen: DymoGenerator;
   private mixGen: MixGenerator;
   private player: DymoPlayer;
+  private featureService: FeatureService;
+  private decisionType: DecisionType;
+  private defaultTransitionType: TransitionType;
   private previousPlayingDymos = [];
   private beatsPlayed = 0;
   private previousTracks = [];
@@ -26,20 +38,22 @@ export class AutoDj {
   private transitionsObservable: Subject<Transition> = new Subject();
   private transitionsObserved = 0;
 
-  constructor(private featureService?: FeatureService,
-      private decisionType?: DecisionType,
-      decisionTree: JsonTree<TransitionType> = STANDARD_TREE,
-      private defaultTransitionType = TransitionType.Beatmatch) {
-    this.ready = this.init(decisionTree);
+  constructor(options: AutoDjOptions) {
+    this.ready = this.init(options);
   }
 
-  private async init(decisionTree: JsonTree<TransitionType>) {
-    this.decisionTree = new DecisionTree<TransitionType>(decisionTree);
+  private async init(options: AutoDjOptions) {
+    this.featureService = options.featureService;
+    this.decisionType = options.decisionType;
+    this.defaultTransitionType =
+      options.defaultTransitionType || TransitionType.Beatmatch;
+    this.decisionTree = new DecisionTree(options.decisionTree || STANDARD_TREE);
     this.player = new DymoPlayer({
       useWorkers: true,
-      scheduleAheadTime: 0.5,
-      loadAheadTime: 1,
-      useTone: true
+      scheduleAheadTime: options.scheduleAheadTime || 2,
+      loadAheadTime: options.loadAheadTime || 4,
+      useTone: true,
+      fadeLength: 0.03
     });
     await this.player.init('https://raw.githubusercontent.com/dynamic-music/dymo-core/master/ontologies/')//'https://dynamic-music.github.io/dymo-core/ontologies/')
     this.store = this.player.getDymoManager().getStore();
@@ -84,14 +98,14 @@ export class AutoDj {
     return this.internalTransition(audioUri, {trackUri: newTrack});
   }
 
-  async playDjSet(audioUris: string[], numBars?: number, autoCue?: boolean) {
+  async playDjSet(audioUris: string[], numBars?: number, autoCue?: boolean, duration = 4) {
     await this.ready;
     this.mapSeries(audioUris,
       async (a,i) => {
         console.log("buffering", a)
         await this.player.getAudioBank().preloadBuffers([a]);
         console.log("preloaded")
-        await this.addTrackToMix(a, -1, numBars, autoCue, 4);
+        await this.addTrackToMix(a, -1, numBars, autoCue, duration);
         console.log("added, length now", (await this.store.findParts(this.mixGen.getMixDymo())).length)
       });
   }
@@ -104,6 +118,7 @@ export class AutoDj {
 
   private async addTrackToMix(audioUri: string, position: number, numBars?: number, autoCue?: boolean, duration?: number) {
     const newTrack = await this.extractFeaturesAndAddDymo(audioUri);
+    console.log("extracted")
     const options: TransitionOptions = {trackUri: newTrack};
     if (autoCue) {
       options.cueOffset = await this.analyzer.findCuePoint(newTrack);

@@ -76,7 +76,8 @@ export class Analyzer {
     const localMaxSquared = this.findLocalMaxes(this.findLocalMaxes(loudnesses));
     const indexOfLocalMaxSquared = loudnesses.indexOf(localMaxSquared[0]);
     console.log(indexOfLastIncrease, indexOfInitialMax, indexOfLocalMaxSquared);
-    return indexOfLocalMaxSquared;
+    //return undefined if none found!
+    if (indexOfLocalMaxSquared >= 0) return indexOfLocalMaxSquared;
   }
 
   private findLocalMaxes(values: number[]): number[] {

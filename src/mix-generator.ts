@@ -54,6 +54,7 @@ export class MixGenerator {
 
   async slam(options: TransitionOptions): Promise<Transition> {
     const state = await this.initTransition(options);
+    await this.addControlTrigger(await this.store.addControl("test", uris.AUTO_CONTROL)); //trigger transition observer but no control
     return this.endTransition(state.newTrackBars, TransitionType.Slam, 0);
   }
 
@@ -277,10 +278,10 @@ export class MixGenerator {
   /** adds a trigger to init the the transition, calls an optional function when
     triggered */
   private async addControlTrigger(controlUri: string) {
-    const trigger = await this.store
+    const triggerParamUri = await this.store
       .setControlParam(controlUri, uris.AUTO_CONTROL_TRIGGER, 0);
-    new TransitionObserver(this.store, trigger, this.transitionObserverFunction);
-    await this.generator.addEvent(this.mixDymoUri, trigger, 1);
+    new TransitionObserver(this.store, triggerParamUri, this.transitionObserverFunction);
+    await this.generator.addEvent(this.mixDymoUri, triggerParamUri, 1);
   }
 
   private async addConstraintTriggers(newUris: string[]) {

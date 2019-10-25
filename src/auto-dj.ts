@@ -68,6 +68,10 @@ export class AutoDj {
   isReady(): Promise<void> {
     return this.ready;
   }
+  
+  setFeatureService(service: FeatureService) {
+    this.featureService = service;
+  }
 
   getBeatObservable(): Observable<number> {
     return (this.player.getPlayingDymoUris())
